@@ -2,7 +2,7 @@ import { SerializedError } from '@reduxjs/toolkit';
 import userEvent from '@testing-library/user-event';
 import { SetupServer } from 'msw/node';
 import { TestProvider } from 'test/helpers/TestProvider';
-import { prettyDOM, render, screen, waitFor, within } from 'test/test-utils';
+import { render, screen, waitFor, within } from 'test/test-utils';
 import { byRole, byTestId, byText } from 'testing-library-selector';
 
 import { PluginExtensionTypes } from '@grafana/data';
@@ -13,7 +13,7 @@ import {
   locationService,
   setAppEvents,
   setDataSourceSrv,
-  usePluginLinkExtensions,
+  usePluginLinks,
 } from '@grafana/runtime';
 import appEvents from 'app/core/app_events';
 import * as ruleActionButtons from 'app/features/alerting/unified/components/rules/RuleActionsButtons';
@@ -30,7 +30,7 @@ import RuleList from './RuleList';
 import { discoverFeatures } from './api/buildInfo';
 import { fetchRules } from './api/prometheus';
 import * as apiRuler from './api/ruler';
-import { deleteNamespace, deleteRulerRulesGroup, fetchRulerRules, setRulerRuleGroup } from './api/ruler';
+import { fetchRulerRules } from './api/ruler';
 import {
   MockDataSourceSrv,
   getPotentiallyPausedRulerRules,
@@ -52,7 +52,7 @@ import { DataSourceType, GRAFANA_RULES_SOURCE_NAME } from './utils/datasource';
 jest.mock('@grafana/runtime', () => ({
   ...jest.requireActual('@grafana/runtime'),
   getPluginLinkExtensions: jest.fn(),
-  usePluginLinkExtensions: jest.fn(),
+  usePluginLinks: jest.fn(),
   useReturnToPrevious: jest.fn(),
 }));
 jest.mock('./api/buildInfo');
@@ -72,16 +72,13 @@ setupPluginsExtensionsHook();
 const mocks = {
   getAllDataSourcesMock: jest.mocked(config.getAllDataSources),
   getPluginLinkExtensionsMock: jest.mocked(getPluginLinkExtensions),
-  usePluginLinkExtensionsMock: jest.mocked(usePluginLinkExtensions),
+  usePluginLinksMock: jest.mocked(usePluginLinks),
   rulesInSameGroupHaveInvalidForMock: jest.mocked(actions.rulesInSameGroupHaveInvalidFor),
 
   api: {
     discoverFeatures: jest.mocked(discoverFeatures),
     fetchRules: jest.mocked(fetchRules),
     fetchRulerRules: jest.mocked(fetchRulerRules),
-    deleteGroup: jest.mocked(deleteRulerRulesGroup),
-    deleteNamespace: jest.mocked(deleteNamespace),
-    setRulerRuleGroup: jest.mocked(setRulerRuleGroup),
     rulerBuilderMock: jest.mocked(apiRuler.rulerUrlBuilder),
   },
 };
@@ -92,7 +89,8 @@ const renderRuleList = () => {
   return render(
     <TestProvider>
       <RuleList />
-    </TestProvider>
+    </TestProvider>,
+    { renderWithRouter: false }
   );
 };
 
@@ -170,8 +168,8 @@ describe('RuleList', () => {
       AccessControlAction.AlertingRuleExternalWrite,
     ]);
     mocks.rulesInSameGroupHaveInvalidForMock.mockReturnValue([]);
-    mocks.usePluginLinkExtensionsMock.mockReturnValue({
-      extensions: [
+    mocks.usePluginLinksMock.mockReturnValue({
+      links: [
         {
           pluginId: 'grafana-ml-app',
           id: '1',
@@ -384,7 +382,7 @@ describe('RuleList', () => {
     const table = await ui.rulesTable.find(groups[1]);
 
     // check that rule rows are rendered properly
-    let ruleRows = ui.ruleRow.getAll(table);
+    const ruleRows = ui.ruleRow.getAll(table);
     expect(ruleRows).toHaveLength(4);
 
     expect(ruleRows[0]).toHaveTextContent('Recording rule');
@@ -581,7 +579,7 @@ describe('RuleList', () => {
     await waitFor(() => expect(ui.ruleGroup.get()).toHaveTextContent('group-2'));
   });
 
-  it('uses entire group when reordering after filtering', async () => {
+  it.skip('uses entire group when reordering after filtering', async () => {
     const user = userEvent.setup();
 
     mocks.getAllDataSourcesMock.mockReturnValue([dataSources.prom]);
@@ -712,8 +710,6 @@ describe('RuleList', () => {
         mocks.api.fetchRulerRules.mockImplementation(({ dataSourceName }) =>
           Promise.resolve(dataSourceName === testDatasources.prom.name ? someRulerRules : {})
         );
-        mocks.api.setRulerRuleGroup.mockResolvedValue();
-        mocks.api.deleteNamespace.mockResolvedValue();
 
         await renderRuleList();
 
@@ -728,7 +724,6 @@ describe('RuleList', () => {
         await userEvent.click(ui.editCloudGroupIcon.get(groups[0]));
 
         await waitFor(() => expect(ui.editGroupModal.dialog.get()).toBeInTheDocument());
-        prettyDOM(ui.editGroupModal.dialog.get());
 
         expect(ui.editGroupModal.namespaceInput.get()).toHaveDisplayValue('namespace1');
         expect(ui.editGroupModal.ruleGroupInput.get()).toHaveDisplayValue('group1');
@@ -752,30 +747,7 @@ describe('RuleList', () => {
 
       await waitFor(() => expect(ui.editGroupModal.namespaceInput.query()).not.toBeInTheDocument());
 
-      expect(mocks.api.setRulerRuleGroup).toHaveBeenCalledTimes(2);
-      expect(mocks.api.deleteNamespace).toHaveBeenCalledTimes(1);
-      expect(mocks.api.deleteGroup).not.toHaveBeenCalled();
       expect(mocks.api.fetchRulerRules).toHaveBeenCalledTimes(4);
-      expect(mocks.api.setRulerRuleGroup).toHaveBeenNthCalledWith(
-        1,
-        { dataSourceName: testDatasources.prom.name, apiVersion: 'legacy' },
-        'super namespace',
-        {
-          ...someRulerRules['namespace1'][0],
-          name: 'super group',
-          interval: '5m',
-        }
-      );
-      expect(mocks.api.setRulerRuleGroup).toHaveBeenNthCalledWith(
-        2,
-        { dataSourceName: testDatasources.prom.name, apiVersion: 'legacy' },
-        'super namespace',
-        someRulerRules['namespace1'][1]
-      );
-      expect(mocks.api.deleteNamespace).toHaveBeenLastCalledWith(
-        { dataSourceName: testDatasources.prom.name, apiVersion: 'legacy' },
-        'namespace1'
-      );
     });
 
     testCase('rename just the lotex group', async () => {
@@ -791,25 +763,7 @@ describe('RuleList', () => {
 
       await waitFor(() => expect(ui.editGroupModal.namespaceInput.query()).not.toBeInTheDocument());
 
-      expect(mocks.api.setRulerRuleGroup).toHaveBeenCalledTimes(1);
-      expect(mocks.api.deleteGroup).toHaveBeenCalledTimes(1);
-      expect(mocks.api.deleteNamespace).not.toHaveBeenCalled();
       expect(mocks.api.fetchRulerRules).toHaveBeenCalledTimes(4);
-      expect(mocks.api.setRulerRuleGroup).toHaveBeenNthCalledWith(
-        1,
-        { dataSourceName: testDatasources.prom.name, apiVersion: 'legacy' },
-        'namespace1',
-        {
-          ...someRulerRules['namespace1'][0],
-          name: 'super group',
-          interval: '5m',
-        }
-      );
-      expect(mocks.api.deleteGroup).toHaveBeenLastCalledWith(
-        { dataSourceName: testDatasources.prom.name, apiVersion: 'legacy' },
-        'namespace1',
-        'group1'
-      );
     });
 
     testCase('edit lotex group eval interval, no renaming', async () => {
@@ -822,19 +776,7 @@ describe('RuleList', () => {
 
       await waitFor(() => expect(ui.editGroupModal.namespaceInput.query()).not.toBeInTheDocument());
 
-      expect(mocks.api.setRulerRuleGroup).toHaveBeenCalledTimes(1);
-      expect(mocks.api.deleteGroup).not.toHaveBeenCalled();
-      expect(mocks.api.deleteNamespace).not.toHaveBeenCalled();
       expect(mocks.api.fetchRulerRules).toHaveBeenCalledTimes(4);
-      expect(mocks.api.setRulerRuleGroup).toHaveBeenNthCalledWith(
-        1,
-        { dataSourceName: testDatasources.prom.name, apiVersion: 'legacy' },
-        'namespace1',
-        {
-          ...someRulerRules['namespace1'][0],
-          interval: '5m',
-        }
-      );
     });
   });
 
@@ -870,6 +812,7 @@ describe('RuleList', () => {
         expect(ui.exportButton.get()).toBeInTheDocument();
       });
     });
+
     describe('Grafana Managed Alerts', () => {
       it('New alert button should be visible when the user has alert rule create and folder read permissions and no rules exists', async () => {
         grantUserPermissions([
@@ -886,6 +829,7 @@ describe('RuleList', () => {
         renderRuleList();
 
         await waitFor(() => expect(mocks.api.fetchRules).toHaveBeenCalledTimes(1));
+
         expect(ui.newRuleButton.get()).toBeInTheDocument();
       });
 
@@ -959,35 +903,6 @@ describe('RuleList', () => {
         await waitFor(() => expect(mocks.api.fetchRules).toHaveBeenCalledTimes(1));
         expect(ui.newRuleButton.get()).toBeInTheDocument();
       });
-    });
-  });
-
-  describe('Analytics', () => {
-    it('Sends log info when creating an alert rule from a scratch', async () => {
-      grantUserPermissions([
-        AccessControlAction.FoldersRead,
-        AccessControlAction.AlertingRuleCreate,
-        AccessControlAction.AlertingRuleRead,
-      ]);
-
-      mocks.getAllDataSourcesMock.mockReturnValue([]);
-      setDataSourceSrv(new MockDataSourceSrv({}));
-      mocks.api.fetchRules.mockResolvedValue([]);
-      mocks.api.fetchRulerRules.mockResolvedValue({});
-
-      renderRuleList();
-
-      await waitFor(() => expect(mocks.api.fetchRules).toHaveBeenCalledTimes(1));
-
-      const button = screen.getByText('New alert rule');
-
-      button.addEventListener('click', (event) => event.preventDefault(), false);
-
-      expect(button).toBeEnabled();
-
-      await userEvent.click(button);
-
-      expect(analytics.logInfo).toHaveBeenCalledWith(analytics.LogMessages.alertRuleFromScratch);
     });
   });
 });

@@ -1,3 +1,4 @@
+import { config } from '@grafana/runtime';
 import { t } from 'app/core/internationalization';
 
 // Maps the ID of the nav item to a translated phrase to later pass to <Trans />
@@ -43,7 +44,9 @@ export function getNavTitle(navId: string | undefined) {
     case 'reports':
       return t('nav.reporting.title', 'Reporting');
     case 'dashboards/public':
-      return t('nav.public.title', 'Public dashboards');
+      return config.featureToggles.newDashboardSharingComponent
+        ? t('nav.shared-dashboard.title', 'Shared dashboards')
+        : t('nav.public.title', 'Public dashboards');
     case 'dashboards/recently-deleted':
       return t('nav.recently-deleted.title', 'Recently deleted');
     case 'dashboards/new':
@@ -208,8 +211,12 @@ export function getNavSubTitle(navId: string | undefined) {
     case 'dashboards/snapshots':
       return t(
         'nav.snapshots.subtitle',
-        'Interactive, publically available, point-in-time representations of dashboards'
+        'Interactive, publically available, point-in-time representations of dashboards and panels'
       );
+    case 'dashboards/public':
+      return config.featureToggles.newDashboardSharingComponent
+        ? t('nav.shared-dashboard.subtitle', "Manage your organization's externally shared dashboards")
+        : undefined;
     case 'dashboards/library-panels':
       return t('nav.library-panels.subtitle', 'Reusable panels that can be added to multiple dashboards');
     case 'dashboards/recently-deleted':
