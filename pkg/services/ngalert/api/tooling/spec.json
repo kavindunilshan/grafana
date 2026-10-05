@@ -3794,6 +3794,14 @@
         }
       }
     },
+    "AlertRuleEditorSettings": {
+      "type": "object",
+      "properties": {
+        "simplified_query_and_expressions_section": {
+          "type": "boolean"
+        }
+      }
+    },
     "AlertRuleExport": {
       "type": "object",
       "title": "AlertRuleExport is the provisioned file export of models.AlertRule.",
@@ -3914,6 +3922,14 @@
         "interval": {
           "type": "integer",
           "format": "int64"
+        }
+      }
+    },
+    "AlertRuleMetadata": {
+      "type": "object",
+      "properties": {
+        "editor_settings": {
+          "$ref": "#/definitions/AlertRuleEditorSettings"
         }
       }
     },
@@ -5206,6 +5222,9 @@
         "is_paused": {
           "type": "boolean"
         },
+        "metadata": {
+          "$ref": "#/definitions/AlertRuleMetadata"
+        },
         "namespace_uid": {
           "type": "string"
         },
@@ -6419,6 +6438,9 @@
         },
         "is_paused": {
           "type": "boolean"
+        },
+        "metadata": {
+          "$ref": "#/definitions/AlertRuleMetadata"
         },
         "no_data_state": {
           "type": "string",
@@ -8207,6 +8229,7 @@
       }
     },
     "alertGroups": {
+      "description": "AlertGroups alert groups",
       "type": "array",
       "items": {
         "type": "object",
@@ -8368,7 +8391,6 @@
       }
     },
     "gettableAlerts": {
-      "description": "GettableAlerts gettable alerts",
       "type": "array",
       "items": {
         "type": "object",
